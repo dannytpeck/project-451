@@ -1,6 +1,8 @@
 import json
 import requests
 import csv
+import re
+import html
 
 csvfile = "challenges.csv"
 
@@ -35,44 +37,119 @@ def get_one_page(page):
 
 
 # # Library has 91 pages
-# for page_number in range(1, 91):
-#     get_one_page(page_number)
+for page_number in range(1, 5):
+    print(f'Fetching page {page_number}', end='', flush=True)
+    page = get_one_page(page_number)
 
-first_page = get_one_page(1)
+    for post in page:
+        print('.', end='', flush=True)
+        title = html.unescape(post['title']['rendered'])
 
-for post in first_page:
-    slug = post['slug']
-    title = post['title']['rendered']
-    url = post['link']
-    date = post['date']
-    modified = post['modified']
+        content = post['content']['rendered']
 
-    print(slug)
-    print(title)
-    print(url)
-    print(date)
-    print(modified)
+        pattern = '(?<=<script type="application\/json">\s).*(?=\s<\/script>)'
+        r = re.search(pattern, content)
+        if r is None:
+            json_data = None
+        else:
+            json_data = json.loads(r.group())['defaults']
 
-    # After putting it all in a list, push the list to the result list
-    # result.append(new_list)
+        r = re.search('(?<=<div id="shD">\s).*(?=\s<\/div>)', content)
+        if r is None:
+            instructions = ''
+        else:
+            instructions = html.unescape(r.group())
 
-    # Get image using the media endpoint
-    image_id = post['featured_media']
-    url = f'http://thelibrary.adurolife.com/wp-json/wp/v2/media/{image_id}'
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = json.loads(response.content.decode('utf-8'))
-        image_url = data['guid']['rendered']
-        print(image_url)
+        r = re.search('(?<=<pre id="fvch-code-0">).*(?=<\/pre>)', content)
+        if r is None:
+            more_information = ''
+        else:
+            more_information = html.unescape(r.group())
+
+        if 125 in post['categories']:
+            category = 'Health and Fitness'
+        elif 126 in post['categories']:
+            category = 'Growth and Development'
+        elif 127 in post['categories']:
+            category = 'Money and Prosperity'
+        elif 128 in post['categories']:
+            category = 'Contribution and Sustainability'
+        else:
+            category = ''
+
+        if json_data:
+            limeade_dimensions = ','.join(json_data['dimensions'])
+            limeade_dimensions = html.unescape(limeade_dimensions)
+        else:
+            limeade_dimensions = ''
+
+        if json_data:
+            limeade_image_url = json_data['imgUrl']
+        else:
+            limeade_image_url = ''
+
+        if json_data:
+            team_activity = 'yes' if json_data['team'] == 'Team' else 'no'
+        else:
+            team_activity = ''
+
+        if json_data:
+            if 'Weekly' in json_data['tracking']:
+                reward_occurrence = 'Weekly'
+            else:
+                reward_occurrence = 'Once'
+        else:
+            reward_occurrence = ''
+
+        if json_data:
+            if 'Units' in json_data['tracking']:
+                activity_tracking_type = 'Units'
+                activity_goal = json_data['required']
+            elif 'Days' in json_data['tracking']:
+                activity_tracking_type = 'Days'
+                activity_goal = json_data['required']
+            else:
+                activity_tracking_type = 'Event'
+                activity_goal = ''
+        else:
+            activity_tracking_type = ''
+            activity_goal = ''
+
+        if json_data:
+            device_enabled = json_data['device']
+            if device_enabled == 'yes':
+                activity_goal_text = json_data['text'].split(' | ')[1]
+                device_units = json_data['text'].split(' | ')[0]
+            else:
+                activity_goal_text = json_data['text']
+                if activity_goal_text == '0':
+                    activity_goal_text = ''
+                device_units = ''
+        else:
+            activity_goal_text = ''
+            device_enabled = ''
+            device_units = ''
+
+        one_line = [title, instructions, more_information, category,
+                    limeade_dimensions, limeade_image_url, team_activity,
+                    reward_occurrence, activity_tracking_type, activity_goal,
+                    activity_goal_text, device_enabled, device_units]
+
+        # Get image using the media endpoint
+        image_id = post['featured_media']
+        url = f'http://thelibrary.adurolife.com/wp-json/wp/v2/media/{image_id}'
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = json.loads(response.content.decode('utf-8'))
+            image_url = data['guid']['rendered']
+            one_line.append(image_url)
+
+        # After putting it all in a list, push the list to the result list
+        result.append(one_line)
+    print('')
 
 # Output result to CSV
-with open(csvfile, "w") as output:
+with open(csvfile, 'w') as output:
     writer = csv.writer(output, lineterminator='\n')
     writer.writerows(result)
-
-# Notes for later
-
-# How to get an image from its post
-# http://thelibrary.adurolife.com/wp-json/wp/v2/posts?slug=727989
-# post['featured_media'] (8919 in this case)
-# http://thelibrary.adurolife.com/wp-json/wp/v2/media/8918
+    print('Saving CSV file')
