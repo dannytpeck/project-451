@@ -3,8 +3,9 @@ import requests
 import csv
 import re
 import html
+import os.path
 
-csvfile = "challenges.csv"
+csvfile = 'challenges.csv'
 
 headers = [
     'Title',
@@ -23,7 +24,11 @@ headers = [
     'Header Image'
 ]
 
-result = [headers]
+if not os.path.exists(csvfile):
+    # Create csv with headers
+    with open(csvfile, 'a') as output:
+        writer = csv.writer(output, lineterminator='\n')
+        writer.writerows([headers])
 
 
 def get_one_page(page):
@@ -36,8 +41,8 @@ def get_one_page(page):
         return None
 
 
-# # Library has 91 pages
-for page_number in range(1, 5):
+# Library has 91 pages
+for page_number in range(1, 92):
     print(f'Fetching page {page_number}', end='', flush=True)
     page = get_one_page(page_number)
 
@@ -60,7 +65,7 @@ for page_number in range(1, 5):
         else:
             instructions = html.unescape(r.group())
 
-        r = re.search('(?<=<pre id="fvch-code-0">).*(?=<\/pre>)', content)
+        r = re.search('(?<=<pre id="fvch-code-0">)[\s\S]*(?=<\/pre>)', content)
         if r is None:
             more_information = ''
         else:
@@ -116,12 +121,20 @@ for page_number in range(1, 5):
             activity_goal = ''
 
         if json_data:
-            device_enabled = json_data['device']
+            if 'device' in json_data:
+                device_enabled = json_data['device']
+            else:
+                device_enabled = 'no'
+
             if device_enabled == 'yes':
                 activity_goal_text = json_data['text'].split(' | ')[1]
                 device_units = json_data['text'].split(' | ')[0]
             else:
-                activity_goal_text = json_data['text']
+                if 'text' in json_data:
+                    activity_goal_text = json_data['text']
+                else:
+                    activity_goal_text = ''
+
                 if activity_goal_text == '0':
                     activity_goal_text = ''
                 device_units = ''
@@ -144,12 +157,13 @@ for page_number in range(1, 5):
             image_url = data['guid']['rendered']
             one_line.append(image_url)
 
-        # After putting it all in a list, push the list to the result list
-        result.append(one_line)
-    print('')
+        # Encode every column in the row
+        for i in one_line:
+            i = i.encode('utf-8')
 
-# Output result to CSV
-with open(csvfile, 'w') as output:
-    writer = csv.writer(output, lineterminator='\n')
-    writer.writerows(result)
-    print('Saving CSV file')
+        # Append result to CSV
+        with open(csvfile, 'a') as output:
+            writer = csv.writer(output, lineterminator='\n')
+            writer.writerows([one_line])
+
+    print('')
